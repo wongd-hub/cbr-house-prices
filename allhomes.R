@@ -1,4 +1,16 @@
-allhomes_scraper <- function(baseurl = "https://www.allhomes.com.au", i_max = Inf) {
+#' Scrape AllHomes
+#'
+#' @param baseurl Base URL of site
+#' @param start_page Which page to start from
+#' @param n_pages Number of pages to scrape
+#' @param hardstop Max number of pages to scrape, handy if setting `n_pages` to
+#'   `Inf` but still not wanting function to go forever
+allhomes_scraper <- function(
+  baseurl = "https://www.allhomes.com.au", 
+  start_page = NULL, 
+  n_pages = Inf, 
+  hardstop = 50
+) {
   
   # Setup ----
   log_info('[AH] Beginning AllHomes scrape')
@@ -7,18 +19,36 @@ allhomes_scraper <- function(baseurl = "https://www.allhomes.com.au", i_max = In
   allhomes_session <- bow(baseurl, force = T)
   
   # Iterators
-  page_sublink <- '/sold/search?region=canberra-act'
+  start_page <- coalesce(start_page, 1)
+  page_sublink <- glue('/sold/search?page={start_page}&region=canberra-act')
   iterator <- 1
   result_table <- list()
   
   # Loop across pages until there are no more
-  while ((!is.na(page_sublink) | iterator > 50) & iterator <= i_max) {
+  while ((!is.na(page_sublink) | hardstop > 50) & iterator <= n_pages) {
+    
+    if (iterator %% 5 == 0) {
+      log_info(glue('[AH]   5 iterations since last sleep, sleeping for 30...'))
+      Sys.sleep(30)
+    }
     
     log_info(glue('[AH]   Iteration {iterator}, scraping {baseurl}/{page_sublink}...'))
     
     # Agree a change in route with the server, then scrape
     search_page_html <- nod(allhomes_session, page_sublink, verbose = T) %>% 
       scrape()
+    
+    # Check if page is populated ----
+    
+    # If this image appears on screen, there are no results at this page. End
+    # the while loop.
+    no_results_img <- search_page_html %>% 
+      html_nodes('img[alt="No properties match your search right now"]')
+    
+    if (length(no_results_img) > 0) {
+      log_info('[AH]     No results found on page - ending scrape')
+      break
+    }
     
     # Information extraction ----
     # Pull nodes relevant to search results then start extracting
@@ -184,7 +214,7 @@ allhomes_scraper <- function(baseurl = "https://www.allhomes.com.au", i_max = In
     
     pagination_buttons <- search_page_html %>% html_nodes('a[data-testid=paginator-navigation-button]')
     
-    page_sublink <- if (length(pagination_buttons) == 1 & iterator == 1) {
+    page_sublink <- if (length(pagination_buttons) == 1 & start_page == 1 & iterator == 1) {
       
       # This is the first page, go to the next page
       pagination_buttons[[1]] %>% html_attr('href')
@@ -194,7 +224,12 @@ allhomes_scraper <- function(baseurl = "https://www.allhomes.com.au", i_max = In
       # A normal page; the second button will be the next page
       pagination_buttons[[2]] %>% html_attr('href')
       
-    } else NA
+    } else {
+      
+      log_info('[AH]       No next page, ending scrape')
+      NA
+      
+    }
     
     iterator <- iterator + 1
     
@@ -206,6 +241,3 @@ allhomes_scraper <- function(baseurl = "https://www.allhomes.com.au", i_max = In
     mutate(timestamp = now("Australia/Sydney"))
   
 }
-
-
-  
