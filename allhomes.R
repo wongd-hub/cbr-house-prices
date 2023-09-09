@@ -120,12 +120,13 @@ allhomes_scraper <- function(baseurl = "https://www.allhomes.com.au", i_max = In
         
         c(
           attribute_values,
-          house_type = html_nodes(.x, 'div > span:nth-of-type(1)') %>% html_text()
+          abode_type = html_nodes(.x, 'div > span:nth-of-type(1)') %>% html_text()
         )
         
       }) %>% 
       bind_rows() %>% 
-      rename_all(.funs = tolower)
+      rename_all(.funs = tolower) %>% 
+      mutate(across(c(bathrooms, eer, bedrooms, parking), as.numeric))
     
     ## Agent details ----
     log_info('[AH]     Extracting agent details')
@@ -163,8 +164,15 @@ allhomes_scraper <- function(baseurl = "https://www.allhomes.com.au", i_max = In
       length() == 1
     ) {
       result_table[[iterator]] <- bind_cols(house_details, house_attributes, house_agent_details) %>% 
+        mutate(
+          hash = paste(address, locality, state, postcode) %>% 
+            str_remove_all(' ') %>% 
+            toupper() %>% 
+            md5() %>% 
+            as.character()
+        ) %>% 
         select(
-          price, house_type, address, locality, state, postcode, bathrooms, 
+          hash, price, abode_type, address, locality, state, postcode, bathrooms, 
           bedrooms, parking, eer, lead_agent_name, agency_name, auction, source
         )
     } else {
@@ -192,7 +200,8 @@ allhomes_scraper <- function(baseurl = "https://www.allhomes.com.au", i_max = In
     
   }
   
-  bind_rows(result_table)
+  bind_rows(result_table) %>% 
+    mutate(timestamp = now())
   
 }
 
