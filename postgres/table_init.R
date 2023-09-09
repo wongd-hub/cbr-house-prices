@@ -1,9 +1,18 @@
+# Run whenever you need to start the table from scratch again
+
 # Load data ----
 # Set up Slowly Changing Dimensions (Type 2) attributes columns using the
 # timestamp
-table_init_payload <- allhomes_scraper(i_max = 5) %>% 
-  rename(start_date = timestamp) %>% 
-  mutate(end_date = as_datetime(NA_Date_), active = TRUE)
+table_init_payload_raw <- allhomes_scraper()
+
+table_init_payload <- table_init_payload_raw %>% 
+  mutate(
+    extracted  = as_datetime(timestamp, tz = 'Australia/Sydney'), 
+    start_date = as_datetime(timestamp, tz = 'Australia/Sydney'), 
+    end_date   = as_datetime(NA_Date_, tz = 'Australia/Sydney'),
+    active     = TRUE,
+    .keep      = 'unused'
+  )
 
 # Generate CREATE TABLE query based on contents of this table
 generate_create_table_sql <- function(df, table_name, schema = "public") {
@@ -19,7 +28,7 @@ generate_create_table_sql <- function(df, table_name, schema = "public") {
     "character" = "TEXT",
     "factor"    = "TEXT",
     "Date"      = "DATE",
-    "POSIXct"   = "TIMESTAMP",
+    "POSIXct"   = "TIMESTAMP WITH TIME ZONE",
     "logical"   = "BOOLEAN"
   )
   
@@ -29,7 +38,7 @@ generate_create_table_sql <- function(df, table_name, schema = "public") {
   col_definitions <- paste0(col_names, " ", sql_types, collapse = ", ")
   
   # Generate SQL statement
-  create_table_sql <- sprintf("CREATE TABLE %s.%s (%s);", schema, table_name, col_definitions)
+  create_table_sql <- glue("CREATE TABLE {schema}.{table_name} ({col_definitions});")
   
   return(create_table_sql)
   

@@ -10,4 +10,5 @@ suppressPackageStartupMessages({
   library(dbplyr)
   library(RPostgres)
   library(openssl)
+  library(testthat)
 })

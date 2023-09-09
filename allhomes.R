@@ -14,7 +14,7 @@ allhomes_scraper <- function(baseurl = "https://www.allhomes.com.au", i_max = In
   # Loop across pages until there are no more
   while ((!is.na(page_sublink) | iterator > 50) & iterator <= i_max) {
     
-    log_info(glue('[AH]   Scraping {baseurl}/{page_sublink}...'))
+    log_info(glue('[AH]   Iteration {iterator}, scraping {baseurl}/{page_sublink}...'))
     
     # Agree a change in route with the server, then scrape
     search_page_html <- nod(allhomes_session, page_sublink, verbose = T) %>% 
@@ -165,14 +165,14 @@ allhomes_scraper <- function(baseurl = "https://www.allhomes.com.au", i_max = In
     ) {
       result_table[[iterator]] <- bind_cols(house_details, house_attributes, house_agent_details) %>% 
         mutate(
-          hash = paste(address, locality, state, postcode) %>% 
+          hash_id = paste(address, locality, state, postcode) %>% 
             str_remove_all(' ') %>% 
             toupper() %>% 
             md5() %>% 
             as.character()
         ) %>% 
         select(
-          hash, price, abode_type, address, locality, state, postcode, bathrooms, 
+          hash_id, price, abode_type, address, locality, state, postcode, bathrooms, 
           bedrooms, parking, eer, lead_agent_name, agency_name, auction, source
         )
     } else {
@@ -200,8 +200,10 @@ allhomes_scraper <- function(baseurl = "https://www.allhomes.com.au", i_max = In
     
   }
   
+  log_success('[AH] AllHomes scrape complete')
+  
   bind_rows(result_table) %>% 
-    mutate(timestamp = now())
+    mutate(timestamp = now("Australia/Sydney"))
   
 }
 
