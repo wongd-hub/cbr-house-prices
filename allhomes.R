@@ -13,14 +13,20 @@ allhomes_scraper <- function(
   n_pages      = Inf, 
   hardstop     = 50,
   forced_delay = FALSE,
-  debug        = FALSE
+  
+  # Dev/debugging
+  debug        = FALSE,
+  html_ovrride = NULL
 ) {
   
   # Setup ----
   log_info('[AH] Beginning AllHomes scrape')
   
+  # For testing purposes, set up a few variables
+  if (!is.null(html_ovrride)) n_pages <- 1
+  
   # Politely introduce bot to AllHomes website
-  allhomes_session <- bow(baseurl, force = T)
+  allhomes_session <- if (is.null(html_ovrride)) bow(baseurl, force = T) else NA
   
   # Iterators
   start_page <- coalesce(start_page, 1)
@@ -39,10 +45,14 @@ allhomes_scraper <- function(
     log_info(glue('[AH]   Iteration {iterator}, scraping {baseurl}/{page_sublink}...'))
     
     # Agree a change in route with the server, then scrape
-    search_page_html <- nod(allhomes_session, page_sublink, verbose = T) %>% 
-      scrape()
+    search_page_html <- if (is.null(html_ovrride)) {
+      nod(allhomes_session, page_sublink, verbose = T) %>% 
+        scrape()
+    } else {
+      read_html(html_ovrride)
+    }
     
-    
+
     # Check if page is populated ----
     
     # If this image appears on screen, there are no results at this page. End
