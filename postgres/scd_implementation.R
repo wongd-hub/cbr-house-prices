@@ -1,5 +1,9 @@
-compare_new_data <- function(
-  data = NULL,
+#' Update PostgreSQL DB
+#' 
+#' @param data Data to check against DB
+#' @param source Data source to limit updates to
+update_db <- function(
+  data   = NULL,
   source = NULL
 ) {
   
@@ -135,15 +139,3 @@ compare_new_data <- function(
   log_success('[DB*] Database update complete')
    
 }
-
-
-orchestration_script <- function() {
-  
-  allhomes <- allhomes_scraper()
-  
-  data_payload <- compare_new_data(allhomes, source = 'allhomes')
-  
-}
-
-
-

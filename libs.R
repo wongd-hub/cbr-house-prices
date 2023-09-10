@@ -11,4 +11,8 @@ suppressPackageStartupMessages({
   library(RPostgres)
   library(openssl)
   library(testthat)
+  library(cronR)
 })
+
+source('allhomes.R')
+source('scd_implementation.R')
