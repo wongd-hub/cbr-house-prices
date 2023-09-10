@@ -5,11 +5,15 @@
 #' @param n_pages Number of pages to scrape
 #' @param hardstop Max number of pages to scrape, handy if setting `n_pages` to
 #'   `Inf` but still not wanting function to go forever
+#' @param forced_delay Whether to force sleep for 30 seconds every 5 iterations
+#' @param debug Whether to run browser if potentially problematic rows exist
 allhomes_scraper <- function(
-  baseurl = "https://www.allhomes.com.au", 
-  start_page = NULL, 
-  n_pages = Inf, 
-  hardstop = 50
+  baseurl      = "https://www.allhomes.com.au", 
+  start_page   = NULL, 
+  n_pages      = Inf, 
+  hardstop     = 50,
+  forced_delay = FALSE,
+  debug        = FALSE
 ) {
   
   # Setup ----
@@ -27,7 +31,7 @@ allhomes_scraper <- function(
   # Loop across pages until there are no more
   while ((!is.na(page_sublink) | hardstop > 50) & iterator <= n_pages) {
     
-    if (iterator %% 5 == 0) {
+    if (forced_delay & iterator %% 5 == 0) {
       log_info(glue('[AH]   5 iterations since last sleep, sleeping for 30...'))
       Sys.sleep(30)
     }
@@ -37,6 +41,7 @@ allhomes_scraper <- function(
     # Agree a change in route with the server, then scrape
     search_page_html <- nod(allhomes_session, page_sublink, verbose = T) %>% 
       scrape()
+    
     
     # Check if page is populated ----
     
@@ -49,6 +54,7 @@ allhomes_scraper <- function(
       log_info('[AH]     No results found on page - ending scrape')
       break
     }
+    
     
     # Information extraction ----
     # Pull nodes relevant to search results then start extracting
@@ -90,6 +96,7 @@ allhomes_scraper <- function(
       div:nth-of-type(1) 
     ")
     
+    
     ## Price/Location details ----
     log_info('[AH]     Extracting price/location details')
     
@@ -121,13 +128,20 @@ allhomes_scraper <- function(
         set_names(names(sub_queries)) %>% 
         # Manipulating the price string to pull relevant information
         mutate(
-          auction = str_detect(price, '(?i)auction'),
-          price   = str_extract(price, '(?<=\\$)[0-9,]+') %>% 
+          auction        = str_detect(price, '(?i)auction'),
+          by_negotiation = str_detect(price, '(?i)by negotiation'),
+          price          = str_extract(price, '(?<=\\$)[0-9,]+') %>% 
             str_remove_all(',') %>% 
             as.numeric(),
-          source = 'allhomes'
+          source         = 'allhomes'
         )
     })
+
+    if (
+      debug & (house_details %>% 
+        filter(is.na(price) & !by_negotiation & !auction) %>% 
+        nrow() > 0)
+    ) browser()
     
     ## Beds/Baths/etc attributes ----
     log_info('[AH]     Extracting beds/baths/etc attributes')
@@ -158,6 +172,7 @@ allhomes_scraper <- function(
       rename_all(.funs = tolower) %>% 
       mutate(across(c(bathrooms, eer, bedrooms, parking), as.numeric))
     
+    
     ## Agent details ----
     log_info('[AH]     Extracting agent details')
     
@@ -179,6 +194,7 @@ allhomes_scraper <- function(
           agency_name     = .x %>% html_nodes('div[data-test-id=agency-details-type] span#agencyName') %>% html_text()
         )
       })
+    
     
     ## Save ----
     log_info('[AH]     Performing checks and saving....')
@@ -203,12 +219,13 @@ allhomes_scraper <- function(
         ) %>% 
         select(
           hash_id, price, abode_type, address, locality, state, postcode, bathrooms, 
-          bedrooms, parking, eer, lead_agent_name, agency_name, auction, source
+          bedrooms, parking, eer, lead_agent_name, agency_name, auction, by_negotiation, source
         )
     } else {
       stop(glue('[AH] Not all details/attributes/agent subtables have equal length for {page_sublink}'))
     }
   
+    
     # Get next route ----
     log_info('[AH]     Getting next route')
     
