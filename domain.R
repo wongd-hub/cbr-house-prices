@@ -4,6 +4,8 @@
 # Might be difficult. AllHomes had special stuff that needed separate scraping.
 # Make sub-functions that you can switch out to handle this?
 
+# TODO: Still missing one record on page 3
+
 #' Scrape Domain
 #'
 #' @param baseurl Base URL of site
@@ -79,8 +81,11 @@ domain_scraper <- function(
     # of each card in Chrome DevTools
     base_query <- "div[data-testid^=listing-card-wrapper]"
     
-    # From the base query, we add these extra selectors on to pull out easy
-    # access relevant information
+    relevant_html <- search_page_html %>%
+      html_nodes(base_query)
+    
+    # From the base query, we add these extra selectors on to pull out
+    # easy-to-access relevant information
     sub_queries <- list(
       price         = 
         " p[data-testid=listing-card-price]",
@@ -96,38 +101,41 @@ domain_scraper <- function(
         "div[data-testid=listing-card-features-wrapper] > div:nth-of-type(2)"
     )
     
-    log_info('[DM]     Extracting property details')
+    log_info(glue('[DM]     {length(relevant_html)} entries found'))
     
     # Do all scraping within one map to handle if certain search result cards
     # are missing whole sets of attributes
-    house_details <- search_page_html %>%
-      html_nodes(base_query) %>%
+    log_info('[DM]     Extracting property details')
+    
+    house_details <- relevant_html %>%
       map(~{
 
         search_result <- .x
 
         ## Easily queryable details ----
-        suppressMessages({
-          base_details <- names(sub_queries) %>%
-            map_dfc(~{
-              
-              search_result %>%
-                html_nodes(sub_queries[[.x]]) %>%
-                html_text() %>%
-                trimws() %>%
-                {if (.x == 'address') str_remove(., ',\\s$') else .} %>%
-                {if (.x == 'locality') str_to_title(.) else .}
-              
-            }) %>%
-            set_names(names(sub_queries)) %>%
-            # Manipulating the price string to pull relevant information
-            mutate(
-              price          = str_extract(price, '(?<=\\$)[0-9,]+') %>%
-                str_remove_all(',') %>%
-                as.numeric(),
-              source         = 'domain'
-            )
-        })
+        base_details <- names(sub_queries) %>%
+          map(~{
+            
+            search_result %>%
+              html_nodes(sub_queries[[.x]]) %>%
+              html_text() %>%
+              trimws() %>%
+              {if (.x == 'address') str_remove(., ',\\s$') else .} %>%
+              {if (.x == 'locality') str_to_title(.) else .}
+            
+          }) %>%
+          set_names(names(sub_queries)) %>%
+          unlist() %>% enframe() %>% 
+          pivot_wider(names_from = name, values_from = value) %>% 
+          # Manipulating the price string to pull relevant information
+          mutate(
+            price    = if ("price"    %in% names(.)) str_extract(price, '(?<=\\$)[0-9,]+') %>%
+              str_remove_all(',') %>%
+              as.numeric() else NA_real_,
+            address  = if ("address"  %in% names(.)) str_remove(address, ',\\s$') else NA_character_,
+            locality = if ("locality" %in% names(.)) str_to_title(locality) else NA_character_,
+            source   = 'domain'
+          )
 
         ## Other attributes ----
         # Auction/Private Treaty tag
@@ -152,13 +160,18 @@ domain_scraper <- function(
         # is generally the land area which isn't consistently present
         if (length(missing_idx) > 0) attribute_titles <- attribute_titles[-missing_idx]
         
+        # Placeholder in case no attributes exist
+        if (length(attribute_titles) == 0) 
+          attributes_container <- c(Bed = NA_real_, Bath = NA_real_, Parking = NA_real_)
+        
         # Pull first 'word' - the number (be general here since this can also
         # take the form of a dash)
         attribute_values <- attributes_container %>% 
           str_extract('^\\w+') %>% 
           {if (length(missing_idx) > 0) .[-missing_idx] else .} %>% 
           as.numeric() %>% 
-          set_names(attribute_titles)
+          {if (length(attribute_titles) == 0) . else set_names(., attribute_titles)}
+          
         
         ## Agency details ----
         agent_details <- html_nodes(search_result, "div[data-testid=listing-card-branding] div > span") %>% 
@@ -183,8 +196,12 @@ domain_scraper <- function(
         )
         
       }) %>% 
-      bind_rows()
-    
+      bind_rows() %>% 
+      rename_all(.funs = tolower) %>% 
+      rename(
+        bedrooms  = bed,
+        bathrooms = bath
+      )
     
     if (
       debug & (house_details %>% filter(is.na(price)) %>% nrow() > 0)
