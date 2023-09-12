@@ -79,42 +79,8 @@ domain_scraper <- function(
     # of each card in Chrome DevTools
     base_query <- "div[data-testid^=listing-card-wrapper]"
     
-    # search_page_html %>% 
-    #   html_nodes(base_query) %>% 
-    #   map(~{
-    #     
-    #     search_result <- .x
-    #     
-    #     ## Deets
-    #      names(sub_queries) %>% 
-    #       map_dfc(~{
-    #         
-    #         search_result %>% 
-    #           html_nodes(sub_queries[[.x]]) %>% 
-    #           html_text() %>% 
-    #           trimws() %>% 
-    #           {if (.x == 'address') str_remove(., ',\\s$') else .} %>% 
-    #           {if (.x == 'locality') str_to_title(.) else .}
-    #         
-    #       }) %>% 
-    #       set_names(names(sub_queries)) %>% 
-    #       # Manipulating the price string to pull relevant information
-    #       mutate(
-    #         price          = str_extract(price, '(?<=\\$)[0-9,]+') %>% 
-    #           str_remove_all(',') %>% 
-    #           as.numeric(),
-    #         source         = 'domain'
-    #       )
-    #      
-    #      ## 
-    #   })
-    
-    
-    ## Price/Location details ----
-    log_info('[DM]     Extracting price/location details')
-    
-    # From the base query, we add these extra selectors on to pull out relevant
-    # information
+    # From the base query, we add these extra selectors on to pull out easy
+    # access relevant information
     sub_queries <- list(
       price         = 
         " p[data-testid=listing-card-price]",
@@ -125,64 +91,50 @@ domain_scraper <- function(
       state         = 
         " span[data-testid=address-line2] > span:nth-of-type(2)",
       postcode      = 
-        " span[data-testid=address-line2] > span:nth-of-type(3)"
+        " span[data-testid=address-line2] > span:nth-of-type(3)",
+      abode_type    =
+        "div[data-testid=listing-card-features-wrapper] > div:nth-of-type(2)"
     )
     
-    # Loop across details, extract, and store in table
-    suppressMessages({
-      house_details <- names(sub_queries) %>% 
-        map_dfc(~{
-          
-          search_page_html %>% 
-            html_nodes(paste(base_query, '> div:nth-of-type(2)', sub_queries[[.x]])) %>% 
-            html_text() %>% 
-            trimws() %>% 
-            {if (.x == 'address') str_remove(., ',\\s$') else .} %>% 
-            {if (.x == 'locality') str_to_title(.) else .}
-          
-        }) %>% 
-        set_names(names(sub_queries)) %>% 
-        # Manipulating the price string to pull relevant information
-        mutate(
-          price          = str_extract(price, '(?<=\\$)[0-9,]+') %>% 
-            str_remove_all(',') %>% 
-            as.numeric(),
-          source         = 'domain'
-        )
-    })
+    log_info('[DM]     Extracting property details')
     
-    if (
-      debug & (house_details %>% 
-               filter(is.na(price)) %>% 
-               nrow() > 0)
-    ) browser()
-    
-    ## Beds/Baths/etc attributes ----
-    log_info('[DM]     Extracting beds/baths/etc attributes & agent details')
-    
-    # Pulling out bed/bath/etc attributes
-    house_attribute_nodes <- search_page_html %>% 
-      # div id __domain_group/APP_ROOT
-      html_nodes(base_query)
-    
-    #  Attributes
-    house_attributes <- house_attribute_nodes %>% 
+    # Do all scraping within one map to handle if certain search result cards
+    # are missing whole sets of attributes
+    house_details <- search_page_html %>%
+      html_nodes(base_query) %>%
       map(~{
-        
-        ## Attributes ----
+
+        search_result <- .x
+
+        ## Easily queryable details ----
+        suppressMessages({
+          base_details <- names(sub_queries) %>%
+            map_dfc(~{
+              
+              search_result %>%
+                html_nodes(sub_queries[[.x]]) %>%
+                html_text() %>%
+                trimws() %>%
+                {if (.x == 'address') str_remove(., ',\\s$') else .} %>%
+                {if (.x == 'locality') str_to_title(.) else .}
+              
+            }) %>%
+            set_names(names(sub_queries)) %>%
+            # Manipulating the price string to pull relevant information
+            mutate(
+              price          = str_extract(price, '(?<=\\$)[0-9,]+') %>%
+                str_remove_all(',') %>%
+                as.numeric(),
+              source         = 'domain'
+            )
+        })
+
+        ## Other attributes ----
         # Auction/Private Treaty tag
-        auction_or_negotiation <- html_nodes(.x, "div[data-testid=listing-card-tag]") %>% 
+        auction_or_negotiation <- html_nodes(search_result, "div[data-testid=listing-card-tag]") %>% 
           html_text()
         
-        # Type of abode
-        abode_type <- .x %>% 
-          html_nodes('
-            div[data-testid=listing-card-features-wrapper] > 
-            div:nth-of-type(2)
-          ') %>% 
-          html_text() # Can be Apartment / Unit / Flat - update allhomes handling 
-        
-        attributes_container <- .x %>% 
+        attributes_container <- search_result %>% 
           html_nodes('
             div[data-testid=listing-card-features-wrapper] 
             span[data-testid="property-features-text-container"]
@@ -193,7 +145,7 @@ domain_scraper <- function(
         attribute_titles <- attributes_container %>% 
           str_extract('\\w+$') %>% 
           str_remove('s$')
-          
+        
         missing_idx <- which(is.na(attribute_titles))
         
         # If there is a missing attribute title, ignore that attribute; this
@@ -207,63 +159,56 @@ domain_scraper <- function(
           {if (length(missing_idx) > 0) .[-missing_idx] else .} %>% 
           as.numeric() %>% 
           set_names(attribute_titles)
-
+        
         ## Agency details ----
-        agent_details <- html_nodes(.x, "div[data-testid=listing-card-branding] div > span") %>% 
+        agent_details <- html_nodes(search_result, "div[data-testid=listing-card-branding] div > span") %>% 
           html_text()
         
-        # Output in tibble to row-bind
-        tibble(
+        attribute_details <- tibble(
           enframe(attribute_values) %>% 
             pivot_wider(names_from = name, values_from = value),
           auction         = str_detect(auction_or_negotiation, '(?i)auction'),
           by_negotiation  = str_detect(auction_or_negotiation, '(?i)private treaty|negotiation'),
-          abode_type      = abode_type,
           sold_date       = str_extract(auction_or_negotiation, '\\d+ \\w+ \\d{4}') %>% 
             dmy() %>% 
             as_datetime('Australia/Sydney'),
-          lead_agent_name = ifelse(length(agent_details) == 0, NA, agent_details[[1]]),
-          agency_name     = ifelse(length(agent_details) == 0, NA, agent_details[[2]])
+          lead_agent_name = ifelse(length(agent_details) == 0, NA_character_, agent_details[[1]]),
+          agency_name     = ifelse(length(agent_details) == 0, NA_character_, agent_details[[2]])
+        )
+        
+        # Output in tibble to row-bind
+        bind_cols(
+          base_details,
+          attribute_details
         )
         
       }) %>% 
-      bind_rows() %>% 
-      rename_all(.funs = tolower) %>% 
-      rename(
-        bedrooms  = bed,
-        bathrooms = bath
-      )
+      bind_rows()
     
     
+    if (
+      debug & (house_details %>% filter(is.na(price)) %>% nrow() > 0)
+    ) browser()
+    
+
     ## Save ----
     log_info('[DM]     Performing checks and saving....')
     
-    # Save to overall table as long as results are valid
-    if (
-      c(
-        nrow(house_details), 
-        nrow(house_attributes)
+    # Save to overall table
+    result_table[[iterator]] <- house_details %>% 
+      mutate(
+        hash_id = paste(address, locality, state, postcode) %>% 
+          str_remove_all(' ') %>% 
+          toupper() %>% 
+          md5() %>% 
+          as.character()
       ) %>% 
-      unique() %>% 
-      length() == 1
-    ) {
-      result_table[[iterator]] <- bind_cols(house_details, house_attributes) %>% 
-        mutate(
-          hash_id = paste(address, locality, state, postcode) %>% 
-            str_remove_all(' ') %>% 
-            toupper() %>% 
-            md5() %>% 
-            as.character()
-        ) %>% 
-        select(
-          any_of(c(
-            'hash_id', 'price', 'sold_date', 'abode_type', 'address', 'locality', 'state', 'postcode', 'bathrooms', 
-            'bedrooms', 'parking', 'eer', 'lead_agent_name', 'agency_name', 'auction', 'by_negotiation', 'source'
-          ))
-        )
-    } else {
-      stop(glue('[DM] Not all details/attributes/agent subtables have equal length for {page_sublink}'))
-    }
+      select(
+        any_of(c(
+          'hash_id', 'price', 'sold_date', 'abode_type', 'address', 'locality', 'state', 'postcode', 'bathrooms', 
+          'bedrooms', 'parking', 'eer', 'lead_agent_name', 'agency_name', 'auction', 'by_negotiation', 'source'
+        ))
+      )
     
     
     # Get next route ----
