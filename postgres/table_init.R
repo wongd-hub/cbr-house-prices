@@ -5,7 +5,10 @@ source('libs.R')
 # Load data ----
 # Set up Slowly Changing Dimensions (Type 2) attributes columns using the
 # timestamp
-table_init_payload_raw <- allhomes_scraper()
+table_init_payload_raw <- bind_rows(
+  allhomes_scraper(),
+  domain_scraper()
+)
 
 # TODO Write a function that insistently runs the scraper at a certain interval
 # until no prices are NA -- with kill option after x tries

@@ -35,7 +35,7 @@ allhomes_scraper <- function(
   result_table <- list()
   
   # Loop across pages until there are no more
-  while ((!is.na(page_sublink) | hardstop > 50) & iterator <= n_pages) {
+  while (!is.na(page_sublink) & iterator <= n_pages) {
     
     if (forced_delay & iterator %% 5 == 0) {
       log_info(glue('[AH]   5 iterations since last sleep, sleeping for 30...'))
@@ -52,6 +52,7 @@ allhomes_scraper <- function(
       read_html(html_ovrride)
     }
     
+    # TODO: Start sub-function from here and pass in search_page_html, debug
 
     # Check if page is populated ----
     
@@ -184,6 +185,7 @@ allhomes_scraper <- function(
     
     
     ## Agent details ----
+    # TODO: Put this within the map above in case there are missing deets
     log_info('[AH]     Extracting agent details')
     
     house_agent_detail_nodes <- search_page_html %>% 
@@ -257,6 +259,8 @@ allhomes_scraper <- function(
       NA
       
     }
+    
+    # TODO: Return iteration table and next sublink
     
     iterator <- iterator + 1
     

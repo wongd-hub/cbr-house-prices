@@ -1,3 +1,5 @@
+# TODO: What happens when there's missing cols? Create a new col or will the write handle this for us?
+
 #' Update PostgreSQL DB
 #' 
 #' @param data Data to check against DB
