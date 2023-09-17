@@ -15,4 +15,5 @@ suppressPackageStartupMessages({
 })
 
 source('allhomes.R')
-source('scd_implementation.R')
+source('domain.R')
+source('postgres/scd_implementation.R')

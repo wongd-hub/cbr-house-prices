@@ -169,6 +169,7 @@ allhomes_scraper <- function(
         
         attribute_values <- html_nodes(house_attr_node, 'span > span:nth-of-type(2)') %>% 
           html_text() %>% 
+          as.numeric() %>% 
           set_names(tolower(attribute_titles))
         
         
