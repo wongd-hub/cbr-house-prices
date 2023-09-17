@@ -71,8 +71,8 @@ update_db <- function(
   
   # Pull updated rows
   row_diff <- full_join(
-    working_copy %>% select(hash_id, contents_hash),
-    data %>% select(hash_id, contents_hash),
+    working_copy %>% select(hash_id, source, contents_hash),
+    data %>% select(hash_id, source, contents_hash),
     suffix = c('_current', '_new'),
     by = 'hash_id'
   )
