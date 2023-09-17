@@ -119,9 +119,7 @@ domain_scraper <- function(
             search_result %>%
               html_nodes(sub_queries[[.x]]) %>%
               html_text() %>%
-              trimws() %>%
-              {if (.x == 'address') str_remove(., ',\\s$') else .} %>%
-              {if (.x == 'locality') str_to_title(.) else .}
+              trimws()
             
           }) %>%
           set_names(names(sub_queries)) %>%
@@ -177,6 +175,8 @@ domain_scraper <- function(
         agent_details <- html_nodes(search_result, "div[data-testid=listing-card-branding] div > span") %>% 
           html_text()
         
+        
+        ## Final table ----
         attribute_details <- tibble(
           enframe(attribute_values) %>% 
             pivot_wider(names_from = name, values_from = value),
