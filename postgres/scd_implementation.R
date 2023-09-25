@@ -1,4 +1,5 @@
 # TODO: What happens when there's missing cols? Create a new col or will the write handle this for us?
+# TODO: Put source in the hash too then dont need to join on source
 
 #' Update PostgreSQL DB
 #' 
@@ -40,7 +41,7 @@ update_db <- function(
   
   extracted_timestamp <- unique(data$timestamp)[[1]] - seconds(1)
   
-  # Return list of changed, unchanged, new, but not deleted (we dont do anything with these)
+  # Return list of changed, unchanged, new, but not deleted (we don't do anything with these)
  
   # Get current table ----
   
@@ -69,10 +70,12 @@ update_db <- function(
   
   log_info('[DB*]   Compare row contents and determine updates required')
   
-  # Pull updated rows
+  # Pull updated rows. Note the distinction between the hashes here:
+  #  - Hash ID is a proxy key for the property (based on immutable attributes like address, data source)
+  #  - Contents hash is a hash of all attributes that may change, and will be different if something does change
   row_diff <- full_join(
-    working_copy %>% select(hash_id, source, contents_hash),
-    data %>% select(hash_id, source, contents_hash),
+    working_copy %>% select(hash_id, contents_hash),
+    data %>% select(hash_id, contents_hash),
     suffix = c('_current', '_new'),
     by = 'hash_id'
   )

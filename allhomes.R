@@ -207,7 +207,7 @@ allhomes_scraper <- function(
     # Save to overall table as long as results are valid
     result_table[[iterator]] <- house_details %>% 
       mutate(
-        hash_id = paste(address, locality, state, postcode) %>% 
+        hash_id = paste(address, locality, state, postcode, source) %>% 
           str_remove_all(' ') %>% 
           toupper() %>% 
           md5() %>% 
